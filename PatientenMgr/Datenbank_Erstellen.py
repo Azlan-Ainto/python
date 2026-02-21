@@ -21,7 +21,6 @@ def create_database():
     messagebox.showinfo("Erfolg", "Datenbank und Tabelle wurden erfolgreich erstellt!")
 # ..........................................................................................
 
-
 # ---- GUI---------
 
 root = tk.Tk()
@@ -31,9 +30,8 @@ root.configure(bg="#f0f0f0")
 
 #----- Setze die Größe des Fensters-----
 
-window_width = 350
-window_height = 150
-
+window_width = 450
+window_height = 250
 
 #------Bildschirmgröße ermitteln-----------
 screen_width = root.winfo_screenwidth()
@@ -46,13 +44,11 @@ y = int((screen_height / 2) - (window_height / 2))
 
 root.geometry(f"{window_width}x{window_height}+{x}+{y}")
 
-label = tk.Label(root, text="Willkommen zum Tkinter & SQLite Tutorial!!", pady=10)
+label = tk.Label(root, text="Willkommen zum Tkinter & SQLite Tutorial!!", pady=20)
+
 label.pack()
 
 dbButton = tk.Button(root, text="Datenbank & Tabelle erstellen", command=create_database)
-dbButton.pack(pady=20)
+dbButton.pack(pady=40)
 
 root.mainloop()
-
-
-    
