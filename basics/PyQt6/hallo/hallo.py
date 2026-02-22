@@ -1,0 +1,2 @@
+
+print("Hallo PyQt6!")
