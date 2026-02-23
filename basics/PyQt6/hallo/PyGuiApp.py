@@ -5,8 +5,6 @@ from form_ui import Ui_Widget
 
 
 
-
-
 class MainWindow(QtWidgets.QWidget):
 
     def __init__(self):
