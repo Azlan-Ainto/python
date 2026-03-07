@@ -1,11 +1,13 @@
 
+
 import sys
 import sqlite3
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout,
     QHBoxLayout, QListWidget, QStackedWidget, QLabel,
     QFormLayout, QLineEdit, QPushButton, QTableWidget,
-    QTableWidgetItem, QHeaderView, QComboBox, QMessageBox
+    QTableWidgetItem, QHeaderView, QComboBox, QMessageBox,
+    QToolBar, QSpacerItem, QSizePolicy
 )
 from PyQt6.QtCore import Qt
 
@@ -87,7 +89,8 @@ class DatabaseGUI(QMainWindow):
                 kunden_id INTEGER,
                 produkt_id INTEGER,
                 menge INTEGER,
-                datum TEXT
+                datum TEXT,
+                status TEXT
             )
             """
         )
@@ -147,7 +150,7 @@ class DatabaseGUI(QMainWindow):
             columns_map = {
                 "kunden": ["vorname", "nachname", "email", "telefon"],
                 "produkte": ["artnr", "name", "preis", "lager"],
-                "bestellungen": ["kunden_id", "produkt_id", "menge", "datum"],
+                "bestellungen": ["kunden_id", "produkt_id", "menge", "datum", "status"],
                 "rechnungen": ["bestell_id", "betrag", "faellig", "status"],
                 "lieferanten": ["firmenname", "ansprechpartner", "email", "telefon"],
                 "mitarbeiter": ["vorname", "nachname", "abteilung", "position"],
@@ -177,8 +180,33 @@ class DatabaseGUI(QMainWindow):
         except Exception as e:
             QMessageBox.critical(self, "Datenbankfehler", str(e))
 
-    def refresh_tables(self):
+    def update_row_in_db(self, table_name: str, row_id: int, column_names: list, values: list):
+        """Aktualisiert eine Zeile in der DB basierend auf id."""
+        try:
+            conn = sqlite3.connect("business.db")
+            cursor = conn.cursor()
+            set_clause = ", ".join([f"{col}=?" for col in column_names])
+            query = f"UPDATE {table_name} SET {set_clause} WHERE id = ?"
+            cursor.execute(query, values + [row_id])
+            conn.commit()
+            conn.close()
+            return True, None
+        except Exception as e:
+            return False, str(e)
 
+    def delete_row_in_db(self, table_name: str, row_id: int):
+        """Löscht eine Zeile in der DB basierend auf id."""
+        try:
+            conn = sqlite3.connect("business.db")
+            cursor = conn.cursor()
+            cursor.execute(f"DELETE FROM {table_name} WHERE id = ?", (row_id,))
+            conn.commit()
+            conn.close()
+            return True, None
+        except Exception as e:
+            return False, str(e)
+
+    def refresh_tables(self):
         """Lädt die Daten aus der DB neu in die QTableWidgets."""
         conn = sqlite3.connect("business.db")
         cursor = conn.cursor()
@@ -207,13 +235,18 @@ class DatabaseGUI(QMainWindow):
             table_widget.setRowCount(len(rows))
             for row_idx, row_data in enumerate(rows):
                 for col_idx, value in enumerate(row_data):
-                    # Bei Status-Spalten mit ComboBox: nur Text setzen, wenn keine ComboBox dort ist
-                    if isinstance(table_widget.cellWidget(row_idx, col_idx), QComboBox):
-                        combo = table_widget.cellWidget(row_idx, col_idx)
+                    # Wenn Zelle bereits ein Widget (z.B. ComboBox) ist, behandeln wir separat
+                    cell_widget = table_widget.cellWidget(row_idx, col_idx)
+                    if isinstance(cell_widget, QComboBox):
+                        combo = cell_widget
                         if value is not None and str(value) in [combo.itemText(i) for i in range(combo.count())]:
                             combo.setCurrentText(str(value))
                     else:
-                        table_widget.setItem(row_idx, col_idx, QTableWidgetItem(str(value)))
+                        item = QTableWidgetItem("" if value is None else str(value))
+                        # ID-Spalte nicht editierbar
+                        if col_idx == 0:
+                            item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+                        table_widget.setItem(row_idx, col_idx, item)
 
         conn.close()
 
@@ -265,7 +298,7 @@ class DatabaseGUI(QMainWindow):
         self.stacked_widget.addWidget(
             self.create_form(
                 "Neue Bestellung anlegen",
-                ["Kunden ID", "Produkt ID", "Menge", "Datum"],
+                ["Kunden ID", "Produkt ID", "Menge", "Datum", "Status"],
                 "bestellungen",
             )
         )
@@ -296,6 +329,7 @@ class DatabaseGUI(QMainWindow):
         bestellungen_page = self.create_table_page(
             "Bestellungen",
             ["ID", "Kunden ID", "Produkt ID", "Menge", "Datum", "Status"],
+            table_name="bestellungen",
             status_options=["erledigt", "gesendet", "in Bearbeitung", "storniert"],
         )
         self.table_pages["Bestellungen"] = bestellungen_page
@@ -305,6 +339,7 @@ class DatabaseGUI(QMainWindow):
         kunden_page = self.create_table_page(
             "Kunden",
             ["ID", "Vorname", "Nachname", "E-Mail", "Telefon"],
+            table_name="kunden",
         )
         self.table_pages["Kunden"] = kunden_page
         self.stacked_widget.addWidget(kunden_page)
@@ -313,6 +348,7 @@ class DatabaseGUI(QMainWindow):
         produkte_page = self.create_table_page(
             "Produkte",
             ["ID", "Artikelnummer", "Bezeichnung", "Preis", "Lagerbestand"],
+            table_name="produkte",
         )
         self.table_pages["Produkte"] = produkte_page
         self.stacked_widget.addWidget(produkte_page)
@@ -321,6 +357,7 @@ class DatabaseGUI(QMainWindow):
         lieferanten_page = self.create_table_page(
             "Lieferanten",
             ["ID", "Firmenname", "Ansprechpartner", "E-Mail", "Telefon"],
+            table_name="lieferanten",
         )
         self.table_pages["Lieferanten"] = lieferanten_page
         self.stacked_widget.addWidget(lieferanten_page)
@@ -329,6 +366,7 @@ class DatabaseGUI(QMainWindow):
         mitarbeiter_page = self.create_table_page(
             "Mitarbeiter",
             ["ID", "Vorname", "Nachname", "Abteilung", "Position"],
+            table_name="mitarbeiter",
         )
         self.table_pages["Mitarbeiter"] = mitarbeiter_page
         self.stacked_widget.addWidget(mitarbeiter_page)
@@ -337,6 +375,7 @@ class DatabaseGUI(QMainWindow):
         rechnungen_page = self.create_table_page(
             "Rechnungen",
             ["ID", "Bestell ID", "Betrag", "Fälligkeitsdatum", "Status"],
+            table_name="rechnungen",
             status_options=["gesendet", "bezahlt", "offen", "nicht gesendet"],
         )
         self.table_pages["Rechnungen"] = rechnungen_page
@@ -375,8 +414,8 @@ class DatabaseGUI(QMainWindow):
         layout.addStretch()
         return page
 
-    def create_table_page(self, title, columns, status_options=None):
-        """Erstellt eine standardisierte Seite mit einer Tabelle."""
+    def create_table_page(self, title, columns, table_name=None, status_options=None):
+        """Erstellt eine standardisierte Seite mit einer Tabelle und Edit-Buttons."""
         page = QWidget()
         layout = QVBoxLayout(page)
         layout.setContentsMargins(40, 40, 40, 40)
@@ -389,21 +428,118 @@ class DatabaseGUI(QMainWindow):
         table.setColumnCount(len(columns))
         table.setHorizontalHeaderLabels(columns)
         table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        table.setEditTriggers(QTableWidget.EditTrigger.DoubleClicked | QTableWidget.EditTrigger.SelectedClicked)
+        table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
 
-        # Falls es eine Status-Spalte gibt, Dropdowns einfügen (werden bei refresh_tables mit Daten gefüllt)
+        # Falls es eine Status-Spalte gibt, wir merken uns die Indexe für später
         if status_options and "Status" in columns:
             status_col_index = columns.index("Status")
-            # Wir legen erstmal 0 Zeilen an; Dropdowns werden dynamisch bei Bedarf gesetzt
-            table.setRowCount(0)
-            # Beim späteren Füllen können wir bei Bedarf Comboboxen setzen
-            # (hier nur Struktur, Logik in refresh_tables berücksichtigt)
+        else:
+            status_col_index = None
+
         layout.addWidget(table)
+
+        # Toolbar / Buttons unter der Tabelle
+        btn_layout = QHBoxLayout()
+        refresh_btn = QPushButton("Neu laden")
+        save_changes_btn = QPushButton("Änderungen speichern")
+        delete_btn = QPushButton("Ausgewählte Zeile löschen")
+
+        refresh_btn.clicked.connect(lambda _, tn=table_name: self.refresh_tables())
+        save_changes_btn.clicked.connect(lambda _, t=table, tn=table_name, cols=columns: self.save_table_changes(t, tn, cols))
+        delete_btn.clicked.connect(lambda _, t=table, tn=table_name: self.delete_selected_row(t, tn))
+
+        btn_layout.addWidget(refresh_btn)
+        btn_layout.addWidget(save_changes_btn)
+        btn_layout.addWidget(delete_btn)
+        btn_layout.addStretch()
+
+        layout.addLayout(btn_layout)
+
+        # Speichere Referenz auf table und table_name in page für refresh_tables
+        page._table = table
+        page._table_name = table_name
+        page._status_col_index = status_col_index
+
         return page
 
+    def save_table_changes(self, table_widget: QTableWidget, table_name: str, columns: list):
+        """Liest alle Zeilen aus der Tabelle und speichert geänderte Zeilen in die DB.
+           Vereinfachung: wir gehen jede Zeile durch und updaten anhand der ID (Spalte 0)."""
+        if not table_name:
+            QMessageBox.warning(self, "Fehler", "Kein Tabellenname angegeben.")
+            return
+
+        # Spaltennamen ohne ID (ID ist Spalte 0)
+        column_names = [c for c in columns[1:]]  # z.B. ["Vorname","Nachname",...]
+        rows = table_widget.rowCount()
+        errors = []
+        updates = 0
+
+        for r in range(rows):
+            id_item = table_widget.item(r, 0)
+            if id_item is None:
+                continue
+            try:
+                row_id = int(id_item.text())
+            except ValueError:
+                continue
+
+            # Werte aus Zellen lesen (Spalten 1..n)
+            values = []
+            for c_idx in range(1, table_widget.columnCount()):
+                cell_widget = table_widget.cellWidget(r, c_idx)
+                if isinstance(cell_widget, QComboBox):
+                    values.append(cell_widget.currentText())
+                else:
+                    item = table_widget.item(r, c_idx)
+                    values.append("" if item is None else item.text())
+
+            # Update in DB
+            success, err = self.update_row_in_db(table_name, row_id, column_names, values)
+            if not success:
+                errors.append(f"ID {row_id}: {err}")
+            else:
+                updates += 1
+
+        if errors:
+            QMessageBox.critical(self, "Fehler beim Speichern", "\n".join(errors))
+        else:
+            QMessageBox.information(self, "Erfolg", f"{updates} Zeilen erfolgreich aktualisiert.")
+        self.refresh_tables()
+
+    def delete_selected_row(self, table_widget: QTableWidget, table_name: str):
+        """Löscht die aktuell ausgewählte Zeile aus DB und Tabelle."""
+        sel = table_widget.currentRow()
+        if sel < 0:
+            QMessageBox.warning(self, "Keine Auswahl", "Bitte eine Zeile auswählen.")
+            return
+
+        id_item = table_widget.item(sel, 0)
+        if id_item is None:
+            QMessageBox.warning(self, "Fehler", "ID nicht gefunden.")
+            return
+
+        try:
+            row_id = int(id_item.text())
+        except ValueError:
+            QMessageBox.warning(self, "Fehler", "Ungültige ID.")
+            return
+
+        confirm = QMessageBox.question(self, "Löschen bestätigen", f"Zeile mit ID {row_id} wirklich löschen?")
+        if confirm != QMessageBox.StandardButton.Yes:
+            return
+
+        success, err = self.delete_row_in_db(table_name, row_id)
+        if not success:
+            QMessageBox.critical(self, "Fehler beim Löschen", err)
+        else:
+            QMessageBox.information(self, "Gelöscht", f"Zeile mit ID {row_id} wurde gelöscht.")
+        self.refresh_tables()
+
     def change_page(self, index):
-
         """Wechselt die angezeigte Seite basierend auf der Sidebar-Auswahl."""
-
         self.stacked_widget.setCurrentIndex(index)
 
     def apply_styling(self):
@@ -487,4 +623,3 @@ if __name__ == "__main__":
     window = DatabaseGUI()
     window.show()
     sys.exit(app.exec())
-
